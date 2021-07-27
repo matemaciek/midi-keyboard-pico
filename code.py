@@ -101,7 +101,7 @@ class Layout:
         return [0, 4, 8, 12]
 
     def edit_keys(self):
-        return {0: 'left', 12: 'right'}
+        return {0: 'left', 4: ('imu_on' if IMU_ON else 'imu_off'), 12: 'right'}
 
 class Semitones(Layout):
     def __init__(self):
@@ -237,10 +237,21 @@ EDIT_BUTTONS = {
         'on_press': True,
         'on_release': True,
     },
+    'imu_on': {
+        'c': (32, 32, 0),
+        'on_press': True,
+        'on_release': False,
+    },
+    'imu_off': {
+        'c': (8, 8, 0),
+        'on_press': True,
+        'on_release': False,
+    },
 }
 EDIT = False
 EDIT_ROOT = False
 EDIT_SCALE = False
+IMU_ON = False
 
 def shift_layout(delta):
     set_layout((LAYOUT_NUM + delta) % len(LAYOUTS))
@@ -276,8 +287,10 @@ def key_colour(key, octave_shift):
             #print(key.number, key.modifier, note)
             return MODIFIER_RGB[note]
         if key.number in LAYOUT.edit_keys():
-            c = EDIT_BUTTONS[LAYOUT.edit_keys()[key.number]]['c']
-            return c if int(2*time.monotonic()) % 2 == 0 else (c >> 3 for c in c)
+            cmd = EDIT_BUTTONS[LAYOUT.edit_keys()[key.number]]
+            c = cmd['c']
+            dimmable = cmd['on_press'] or cmd['on_release']
+            return c if (not dimmable or int(2*time.monotonic()) % 2 == 0) else (c >> 3 for c in c)
         else:
             return (0,0,0)
     return shifted(note, octave_shift - 12*(note < LAYOUT.root))
@@ -326,6 +339,10 @@ def run_command(command):
     elif command == 'scale':
         global EDIT_SCALE
         EDIT_SCALE = not EDIT_SCALE
+        set_layout(LAYOUT_NUM) # modifiers might have changed
+    elif command in ['imu_on', 'imu_off']:
+        global IMU_ON
+        IMU_ON = not IMU_ON
         set_layout(LAYOUT_NUM) # modifiers might have changed
 
 def notes_on(n):
@@ -402,7 +419,8 @@ while True:
         acc = imu.raw_acc
         mag = (sum(abs(v) for v in imu.raw_mag)>>7) - 10
         if has_pixel:
-            pixels[0] = (trim(0, mag, 255), abs(acc[0]>>7), abs(acc[1]>>7))
-        midi.send(PitchBend(trim(0, (1<<14) - acc[1]>>1, 16383)))
-        midi.send(ControlChange(1, trim(0, abs(acc[0]>>7), 127)))
-        midi.send(ChannelPressure(trim(0, mag, 127)))
+            pixels[0] = (trim(0, mag, 255), abs(acc[0]>>7), abs(acc[1]>>7)) if IMU_ON else (255, 255, 255)
+        if IMU_ON:
+            midi.send(PitchBend(trim(0, (1<<14) - acc[1]>>1, 16383)))
+            midi.send(ControlChange(1, trim(0, abs(acc[0]>>7), 127)))
+            midi.send(ChannelPressure(trim(0, mag, 127)))
