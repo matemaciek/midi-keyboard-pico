@@ -16,12 +16,20 @@ import time
 from keybow_hardware.pim551 import PIM551 as Hardware
 from keybow2040 import Keybow2040
 
-has_imu = True
 
 import usb_midi
 import adafruit_midi
+
+has_imu = True
 if has_imu:
     import mpu9250
+
+has_pixel = True
+pixels = None
+if has_pixel:
+    import board, neopixel
+    pixels = neopixel.NeoPixel(board.GP21, 1)
+
 from adafruit_midi.note_off import NoteOff
 from adafruit_midi.note_on import NoteOn
 from adafruit_midi.pitch_bend import PitchBend
@@ -391,6 +399,10 @@ while True:
         else:
             key.set_led(*key_colour(key, o_shift))
     if has_imu:
-        midi.send(PitchBend(trim(0, (1<<14) - imu.raw_acc[1]>>1, 16383)))
-        midi.send(ControlChange(1, trim(0, abs(imu.raw_acc[0]>>7), 127)))
-        midi.send(ChannelPressure(trim(0, (sum(abs(v) for v in imu.raw_mag)>>7) - 10, 127)))
+        acc = imu.raw_acc
+        mag = (sum(abs(v) for v in imu.raw_mag)>>7) - 10
+        if has_pixel:
+            pixels[0] = (trim(0, mag, 255), abs(acc[0]>>7), abs(acc[1]>>7))
+        midi.send(PitchBend(trim(0, (1<<14) - acc[1]>>1, 16383)))
+        midi.send(ControlChange(1, trim(0, abs(acc[0]>>7), 127)))
+        midi.send(ChannelPressure(trim(0, mag, 127)))
